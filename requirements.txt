@@ -3,3 +3,7 @@ rembg
 pillow
 tqdm
 opencv-python-headless
+fastapi
+uvicorn
+
+
