@@ -10,6 +10,9 @@ import uuid
 from pathlib import Path
 import logging
 import json
+import os
+import uvicorn
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -401,8 +404,12 @@ async def cleanup_job(job_id: str):
     
     return {"message": "Job cleaned up successfully"}
 
+# if __name__ == "__main__":
+#     import uvicorn
+#      port = int(os.environ.get("PORT", 8000))
+#     # uvicorn.run(app, host="0.0.0.0", port=8002)
+#     uvicorn.run("final:app", host="0.0.0.0", port=port)
+
 if __name__ == "__main__":
-    import uvicorn
-     port = int(os.environ.get("PORT", 8000))
-    # uvicorn.run(app, host="0.0.0.0", port=8002)
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run("final:app", host="0.0.0.0", port=port)
