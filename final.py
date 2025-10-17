@@ -435,8 +435,18 @@ import json
 import uvicorn
 import sys
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging FIRST
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 logger = logging.getLogger(__name__)
+
+# Print immediately to verify script is running
+print("="*60, flush=True)
+print("🔧 Initializing Video Background Remover API", flush=True)
+print("="*60, flush=True)
 
 app = FastAPI(title="Video Background Remover API")
 
@@ -460,12 +470,14 @@ job_status = {}
 def check_ffmpeg():
     """Check if ffmpeg is installed"""
     try:
-        subprocess.run(['ffmpeg', '-version'], 
-                      stdout=subprocess.PIPE, 
-                      stderr=subprocess.PIPE, 
-                      check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        result = subprocess.run(
+            ['ffmpeg', '-version'], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            timeout=5
+        )
+        return result.returncode == 0
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
 def get_video_info(video_path: str):
@@ -656,18 +668,23 @@ def process_video(video_path: str, job_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    """Check dependencies on startup"""
-    logger.info("=" * 50)
-    logger.info("Starting Video Background Remover API")
-    logger.info("=" * 50)
-    
-    if not check_ffmpeg():
-        logger.warning("⚠️  FFmpeg is not installed! Video processing will not work.")
-        logger.warning("⚠️  Image processing will still work.")
-    else:
-        logger.info("✓ FFmpeg found - Video processing available")
-    
-    logger.info("✓ API ready with transparent background support")
+    """Check dependencies on startup - NON-BLOCKING"""
+    try:
+        logger.info("=" * 50)
+        logger.info("Starting Video Background Remover API")
+        logger.info("=" * 50)
+        
+        ffmpeg_available = check_ffmpeg()
+        
+        if not ffmpeg_available:
+            logger.warning("⚠️  FFmpeg is not installed! Video processing will not work.")
+            logger.warning("⚠️  Image processing will still work.")
+        else:
+            logger.info("✓ FFmpeg found - Video processing available")
+        
+        logger.info("✓ API ready with transparent background support")
+    except Exception as e:
+        logger.error(f"Startup event error (non-fatal): {e}")
 
 @app.get("/")
 async def root():
@@ -828,21 +845,27 @@ async def cleanup_job(job_id: str):
     return {"message": "Job cleaned up successfully"}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    
-    print("=" * 60)
-    print(f"🚀 Starting FastAPI Server")
-    print(f"📡 Host: 0.0.0.0")
-    print(f"🔌 Port: {port}")
-    print(f"🌐 Environment: {'Production' if os.environ.get('PORT') else 'Development'}")
-    print("=" * 60)
-    sys.stdout.flush()
-    
-    # Use direct app object reference, not string
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        log_level="info",
-        access_log=True
-    )
+    try:
+        port = int(os.environ.get("PORT", 10000))
+        
+        print("=" * 60, flush=True)
+        print(f"🚀 Starting FastAPI Server", flush=True)
+        print(f"📡 Host: 0.0.0.0", flush=True)
+        print(f"🔌 Port: {port}", flush=True)
+        print(f"🌐 Environment: {'Production (Render)' if os.environ.get('PORT') else 'Development'}", flush=True)
+        print("=" * 60, flush=True)
+        sys.stdout.flush()
+        
+        # Start uvicorn with explicit configuration
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=port,
+            log_level="info",
+            access_log=True,
+            timeout_keep_alive=30
+        )
+    except Exception as e:
+        print(f"❌ FATAL ERROR: {e}", flush=True)
+        logger.exception("Failed to start server")
+        sys.exit(1)
