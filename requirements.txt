@@ -7,4 +7,4 @@ opencv-python-headless
 pillow
 ffmpeg-python
 python-dotenv
-
+onnxruntime==1.19.2
