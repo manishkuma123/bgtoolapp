@@ -1,10 +1,22 @@
-streamlit
-rembg
-pillow
-tqdm
-opencv-python-headless
+
+
+
+
+# Web and API Framework
 fastapi
-uvicorn
+uvicorn[standard]
+gunicorn
 python-multipart
 
+# Background Removal / ML
+rembg
 onnxruntime
+
+# Image / Video Processing
+pillow
+opencv-python-headless
+tqdm
+ffmpeg-python
+
+# Optional UI (if you plan to use Streamlit frontend)
+streamlit
