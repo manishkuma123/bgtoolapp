@@ -9,3 +9,5 @@ pillow
 onnxruntime
 python-multipart
 ffmpeg-python
+python-dotenv
+
