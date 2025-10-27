@@ -448,7 +448,7 @@
 #         logger.exception("Failed to start server")
 #         sys.exit(1)
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
@@ -478,14 +478,15 @@ print("="*60, flush=True)
 
 app = FastAPI(title="Video Background Remover API")
 
-# FIXED CORS CONFIGURATION
+# ENHANCED CORS CONFIGURATION - This must be FIRST middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 BASE_DIR = Path("temp_processing")
@@ -717,6 +718,20 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Startup event error (non-fatal): {e}")
 
+# Add OPTIONS handler for CORS preflight
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handle OPTIONS requests for CORS preflight"""
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -795,11 +810,16 @@ async def remove_image_background(file: UploadFile = File(...)):
         )
     
     try:
+        logger.info(f"Starting image processing: {file.filename}")
         contents = await file.read()
+        logger.info(f"Image read successfully, size: {len(contents)} bytes")
         
-        logger.info(f"Processing image: {file.filename}")
+        # Process with timeout protection
+        logger.info("Removing background...")
         output_data = remove(contents)
+        logger.info(f"Background removed, output size: {len(output_data)} bytes")
         
+        # Convert to RGBA PNG
         img = Image.open(io.BytesIO(output_data))
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
@@ -814,12 +834,14 @@ async def remove_image_background(file: UploadFile = File(...)):
             img_byte_arr,
             media_type="image/png",
             headers={
-                "Content-Disposition": f"attachment; filename=no_bg_{file.filename.rsplit('.', 1)[0]}.png"
+                "Content-Disposition": f"attachment; filename=no_bg_{file.filename.rsplit('.', 1)[0]}.png",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "*"
             }
         )
         
     except Exception as e:
-        logger.error(f"Image processing failed: {str(e)}")
+        logger.error(f"Image processing failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Image processing failed: {str(e)}"
@@ -857,7 +879,11 @@ async def download_video(job_id: str):
         path=output_path,
         filename=filename.replace('.mp4', '.webm'),
         media_type="video/webm",
-        headers={"Content-Disposition": f"attachment; filename={filename.replace('.mp4', '.webm')}"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename.replace('.mp4', '.webm')}",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "*"
+        }
     )
 
 @app.delete("/cleanup/{job_id}")
@@ -894,7 +920,8 @@ if __name__ == "__main__":
             port=port,
             log_level="info",
             access_log=True,
-            timeout_keep_alive=30
+            timeout_keep_alive=120,  # Increased timeout
+            timeout_graceful_shutdown=30
         )
     except Exception as e:
         print(f"❌ FATAL ERROR: {e}", flush=True)
