@@ -459,35 +459,42 @@ import uuid
 from pathlib import Path
 import logging
 import json
-import uvicorn
 import sys
 import io
 
-# Configure logging FIRST
+# FORCE IMMEDIATE OUTPUT
+print("="*60, file=sys.stderr, flush=True)
+print("🔧 SCRIPT STARTING", file=sys.stderr, flush=True)
+print("="*60, file=sys.stderr, flush=True)
+sys.stderr.flush()
+sys.stdout.flush()
+
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
+    stream=sys.stderr,
+    force=True
 )
 logger = logging.getLogger(__name__)
 
-# Print immediately to verify script is running
-print("="*60, flush=True)
-print("🔧 Initializing Video Background Remover API", flush=True)
-print("="*60, flush=True)
+print("✓ Logging configured", file=sys.stderr, flush=True)
 
+# Create FastAPI app
 app = FastAPI(title="Video Background Remover API")
+print("✓ FastAPI app created", file=sys.stderr, flush=True)
 
-# ENHANCED CORS CONFIGURATION - This must be FIRST middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"],  # Expose all headers
-    max_age=3600,  # Cache preflight requests for 1 hour
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+print("✓ CORS middleware added", file=sys.stderr, flush=True)
 
 BASE_DIR = Path("temp_processing")
 UPLOAD_DIR = BASE_DIR / "uploads"
@@ -495,6 +502,7 @@ OUTPUT_DIR = BASE_DIR / "outputs"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+print(f"✓ Directories created: {BASE_DIR}", file=sys.stderr, flush=True)
 
 job_status = {}
 
@@ -700,25 +708,20 @@ def process_video(video_path: str, job_id: str):
 @app.on_event("startup")
 async def startup_event():
     """Check dependencies on startup"""
-    try:
-        logger.info("=" * 50)
-        logger.info("Starting Video Background Remover API")
-        logger.info("=" * 50)
-        
-        ffmpeg_available = check_ffmpeg()
-        
-        if not ffmpeg_available:
-            logger.warning("⚠️  FFmpeg is not installed!")
-        else:
-            logger.info("✓ FFmpeg found - Video processing available")
-        
-        logger.info("✓ API ready with transparent background support")
-        logger.info("✓ CORS enabled for all origins")
-        
-    except Exception as e:
-        logger.error(f"Startup event error (non-fatal): {e}")
+    logger.info("=" * 50)
+    logger.info("🚀 API Startup Event Triggered")
+    logger.info("=" * 50)
+    
+    ffmpeg_available = check_ffmpeg()
+    
+    if not ffmpeg_available:
+        logger.warning("⚠️  FFmpeg is not installed!")
+    else:
+        logger.info("✓ FFmpeg found")
+    
+    logger.info("✓ API ready with transparent background support")
+    logger.info("✓ CORS enabled for all origins")
 
-# Add OPTIONS handler for CORS preflight
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
     """Handle OPTIONS requests for CORS preflight"""
@@ -735,9 +738,10 @@ async def options_handler(full_path: str):
 @app.get("/")
 async def root():
     """Root endpoint"""
+    logger.info("Root endpoint called")
     return {
         "message": "Video Background Remover API",
-        "version": "2.0",
+        "version": "2.1",
         "status": "running",
         "cors_enabled": True,
         "features": ["Transparent Background", "Original Quality", "Original FPS", "Alpha Channel Verification"]
@@ -814,12 +818,10 @@ async def remove_image_background(file: UploadFile = File(...)):
         contents = await file.read()
         logger.info(f"Image read successfully, size: {len(contents)} bytes")
         
-        # Process with timeout protection
         logger.info("Removing background...")
         output_data = remove(contents)
         logger.info(f"Background removed, output size: {len(output_data)} bytes")
         
-        # Convert to RGBA PNG
         img = Image.open(io.BytesIO(output_data))
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
@@ -902,28 +904,28 @@ async def cleanup_job(job_id: str):
     
     return {"message": "Job cleaned up successfully"}
 
+# Get port from environment
+port = int(os.environ.get("PORT", 10000))
+
+print("=" * 60, file=sys.stderr, flush=True)
+print(f"🚀 Ready to start FastAPI Server", file=sys.stderr, flush=True)
+print(f"📡 Host: 0.0.0.0", file=sys.stderr, flush=True)
+print(f"🔌 Port: {port}", file=sys.stderr, flush=True)
+print("=" * 60, file=sys.stderr, flush=True)
+sys.stderr.flush()
+
+# This is the key - we need uvicorn to be imported and run directly
 if __name__ == "__main__":
-    try:
-        port = int(os.environ.get("PORT", 10000))
-        
-        print("=" * 60, flush=True)
-        print(f"🚀 Starting FastAPI Server", flush=True)
-        print(f"📡 Host: 0.0.0.0", flush=True)
-        print(f"🔌 Port: {port}", flush=True)
-        print(f"🌐 Environment: {'Production (Render)' if os.environ.get('PORT') else 'Development'}", flush=True)
-        print("=" * 60, flush=True)
-        sys.stdout.flush()
-        
-        uvicorn.run(
-            app,
-            host="0.0.0.0",
-            port=port,
-            log_level="info",
-            access_log=True,
-            timeout_keep_alive=120,  # Increased timeout
-            timeout_graceful_shutdown=30
-        )
-    except Exception as e:
-        print(f"❌ FATAL ERROR: {e}", flush=True)
-        logger.exception("Failed to start server")
-        sys.exit(1)
+    import uvicorn
+    print(f"🔥 Starting uvicorn on port {port}...", file=sys.stderr, flush=True)
+    sys.stderr.flush()
+    
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        access_log=True,
+        timeout_keep_alive=120,
+        timeout_graceful_shutdown=30
+    )
