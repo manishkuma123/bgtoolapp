@@ -1,13 +1,10 @@
-
-
-
 fastapi
 uvicorn
 gunicorn
-rembg
-pillow
-onnxruntime
 python-multipart
+rembg
+opencv-python-headless
+pillow
 ffmpeg-python
 python-dotenv
 

@@ -447,6 +447,11 @@
 #         print(f"❌ FATAL ERROR: {e}", flush=True)
 #         logger.exception("Failed to start server")
 #         sys.exit(1)
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""   # Disable GPU detection
+os.environ["OMP_NUM_THREADS"] = "1"       # Limit CPU threads
+os.environ["ONNX_DISABLE_EXTERNAL_CUSTOM_OPS"] = "1"  # Lighter ONNX init
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
