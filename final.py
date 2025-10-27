@@ -10,12 +10,21 @@
 # from pathlib import Path
 # import logging
 # import json
-# import os
 # import uvicorn
+# import sys
 
-
-# logging.basicConfig(level=logging.INFO)
+# # Configure logging FIRST
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     stream=sys.stdout
+# )
 # logger = logging.getLogger(__name__)
+
+# # Print immediately to verify script is running
+# print("="*60, flush=True)
+# print("🔧 Initializing Video Background Remover API", flush=True)
+# print("="*60, flush=True)
 
 # app = FastAPI(title="Video Background Remover API")
 
@@ -39,12 +48,14 @@
 # def check_ffmpeg():
 #     """Check if ffmpeg is installed"""
 #     try:
-#         subprocess.run(['ffmpeg', '-version'], 
-#                       stdout=subprocess.PIPE, 
-#                       stderr=subprocess.PIPE, 
-#                       check=True)
-#         return True
-#     except (subprocess.CalledProcessError, FileNotFoundError):
+#         result = subprocess.run(
+#             ['ffmpeg', '-version'], 
+#             stdout=subprocess.PIPE, 
+#             stderr=subprocess.PIPE,
+#             timeout=5
+#         )
+#         return result.returncode == 0
+#     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
 #         return False
 
 # def get_video_info(video_path: str):
@@ -66,7 +77,6 @@
 #         height = int(data['streams'][0]['height'])
 #         duration = float(data['format']['duration'])
         
-#         # Convert fps fraction to decimal
 #         if '/' in fps_str:
 #             num, den = map(int, fps_str.split('/'))
 #             fps = num / den
@@ -113,10 +123,8 @@
 #             with open(input_path, 'rb') as f:
 #                 input_data = f.read()
             
-#             # Remove background with transparency
 #             output_data = remove(input_data)
             
-#             # Ensure RGBA format
 #             img = Image.open(__import__('io').BytesIO(output_data))
     
 #             if img.mode != 'RGBA':
@@ -201,7 +209,6 @@
 #         frames_dir.mkdir(parents=True, exist_ok=True)
 #         no_bg_dir.mkdir(parents=True, exist_ok=True)
         
-#         # Get original video info
 #         logger.info(f"Analyzing video: {video_path}")
 #         fps, width, height, duration = get_video_info(str(video_path))
 #         job_status[job_id]['original_fps'] = fps
@@ -209,20 +216,16 @@
 #         job_status[job_id]['original_height'] = height
 #         job_status[job_id]['original_duration'] = duration
         
-#         # Extract frames at ORIGINAL FPS
 #         job_status[job_id]['status'] = 'extracting_frames'
 #         total_frames = extract_frames(str(video_path), str(frames_dir), fps)
 #         job_status[job_id]['total_frames'] = total_frames
         
-#         # Remove backgrounds with transparency
 #         job_status[job_id]['status'] = 'removing_backgrounds'
 #         remove_background_from_frames(str(frames_dir), str(no_bg_dir), job_id)
         
-#         # Create video with transparency
 #         job_status[job_id]['status'] = 'creating_video'
 #         output_file = create_video_from_frames(str(no_bg_dir), str(output_path), fps, width, height)
 
-#         # Verify alpha channel
 #         has_alpha = verify_alpha_channel(output_file)
 #         job_status[job_id]['has_alpha'] = has_alpha
 
@@ -243,11 +246,23 @@
 
 # @app.on_event("startup")
 # async def startup_event():
-#     """Check dependencies on startup"""
-#     if not check_ffmpeg():
-#         logger.error("FFmpeg is not installed!")
-#         raise RuntimeError("FFmpeg is required but not found in system PATH")
-#     logger.info("FFmpeg found - API ready with transparent background support")
+#     """Check dependencies on startup - NON-BLOCKING"""
+#     try:
+#         logger.info("=" * 50)
+#         logger.info("Starting Video Background Remover API")
+#         logger.info("=" * 50)
+        
+#         ffmpeg_available = check_ffmpeg()
+        
+#         if not ffmpeg_available:
+#             logger.warning("⚠️  FFmpeg is not installed! Video processing will not work.")
+#             logger.warning("⚠️  Image processing will still work.")
+#         else:
+#             logger.info("✓ FFmpeg found - Video processing available")
+        
+#         logger.info("✓ API ready with transparent background support")
+#     except Exception as e:
+#         logger.error(f"Startup event error (non-fatal): {e}")
 
 # @app.get("/")
 # async def root():
@@ -257,6 +272,14 @@
 #         "version": "2.0",
 #         "status": "running",
 #         "features": ["Transparent Background", "Original Quality", "Original FPS", "Alpha Channel Verification"]
+#     }
+
+# @app.get("/health")
+# async def health():
+#     """Health check endpoint"""
+#     return {
+#         "status": "healthy",
+#         "ffmpeg_available": check_ffmpeg()
 #     }
 
 # @app.post("/upload-video/")
@@ -317,26 +340,21 @@
 #         )
     
 #     try:
-#         # Read the uploaded image
 #         contents = await file.read()
         
-#         # Remove background
 #         logger.info(f"Processing image: {file.filename}")
 #         output_data = remove(contents)
         
-#         # Convert to PIL Image to ensure RGBA
 #         img = Image.open(__import__('io').BytesIO(output_data))
 #         if img.mode != 'RGBA':
 #             img = img.convert('RGBA')
         
-#         # Save to bytes
 #         img_byte_arr = __import__('io').BytesIO()
 #         img.save(img_byte_arr, format='PNG')
 #         img_byte_arr.seek(0)
         
 #         logger.info(f"Image processed successfully: {file.filename}")
         
-#         # Return the processed image
 #         from fastapi.responses import StreamingResponse
 #         return StreamingResponse(
 #             img_byte_arr,
@@ -404,24 +422,33 @@
     
 #     return {"message": "Job cleaned up successfully"}
 
-# # if __name__ == "__main__":
-# #     import uvicorn
-# #      port = int(os.environ.get("PORT", 8000))
-# #     # uvicorn.run(app, host="0.0.0.0", port=8002)
-# #     uvicorn.run("final:app", host="0.0.0.0", port=port)
-
 # if __name__ == "__main__":
-   
-#     port = int(os.environ.get("PORT", 10000))
-#     print(f"🚀 Starting FastAPI on {port}")
-#     uvicorn.run("final:app", host="0.0.0.0", port=port)
-
-# # if __name__ == "__main__":
-# #     port = int(os.environ.get("PORT", 8000))
-# #     uvicorn.run("final:app", host="0.0.0.0", port=port)
-
+#     try:
+#         port = int(os.environ.get("PORT", 10000))
+        
+#         print("=" * 60, flush=True)
+#         print(f"🚀 Starting FastAPI Server", flush=True)
+#         print(f"📡 Host: 0.0.0.0", flush=True)
+#         print(f"🔌 Port: {port}", flush=True)
+#         print(f"🌐 Environment: {'Production (Render)' if os.environ.get('PORT') else 'Development'}", flush=True)
+#         print("=" * 60, flush=True)
+#         sys.stdout.flush()
+        
+        
+#         uvicorn.run(
+#             app,
+#             host="0.0.0.0",
+#             port=port,
+#             log_level="info",
+#             access_log=True,
+#             timeout_keep_alive=30
+#         )
+#     except Exception as e:
+#         print(f"❌ FATAL ERROR: {e}", flush=True)
+#         logger.exception("Failed to start server")
+#         sys.exit(1)
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
@@ -434,6 +461,7 @@ import logging
 import json
 import uvicorn
 import sys
+import io
 
 # Configure logging FIRST
 logging.basicConfig(
@@ -450,12 +478,14 @@ print("="*60, flush=True)
 
 app = FastAPI(title="Video Background Remover API")
 
+# FIXED CORS CONFIGURATION
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 BASE_DIR = Path("temp_processing")
@@ -547,7 +577,7 @@ def remove_background_from_frames(frames_dir: str, output_dir: str, job_id: str)
             
             output_data = remove(input_data)
             
-            img = Image.open(__import__('io').BytesIO(output_data))
+            img = Image.open(io.BytesIO(output_data))
     
             if img.mode != 'RGBA':
                 img = img.convert('RGBA')
@@ -668,7 +698,7 @@ def process_video(video_path: str, job_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    """Check dependencies on startup - NON-BLOCKING"""
+    """Check dependencies on startup"""
     try:
         logger.info("=" * 50)
         logger.info("Starting Video Background Remover API")
@@ -677,12 +707,13 @@ async def startup_event():
         ffmpeg_available = check_ffmpeg()
         
         if not ffmpeg_available:
-            logger.warning("⚠️  FFmpeg is not installed! Video processing will not work.")
-            logger.warning("⚠️  Image processing will still work.")
+            logger.warning("⚠️  FFmpeg is not installed!")
         else:
             logger.info("✓ FFmpeg found - Video processing available")
         
         logger.info("✓ API ready with transparent background support")
+        logger.info("✓ CORS enabled for all origins")
+        
     except Exception as e:
         logger.error(f"Startup event error (non-fatal): {e}")
 
@@ -693,6 +724,7 @@ async def root():
         "message": "Video Background Remover API",
         "version": "2.0",
         "status": "running",
+        "cors_enabled": True,
         "features": ["Transparent Background", "Original Quality", "Original FPS", "Alpha Channel Verification"]
     }
 
@@ -701,7 +733,8 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "ffmpeg_available": check_ffmpeg()
+        "ffmpeg_available": check_ffmpeg(),
+        "cors_enabled": True
     }
 
 @app.post("/upload-video/")
@@ -767,17 +800,16 @@ async def remove_image_background(file: UploadFile = File(...)):
         logger.info(f"Processing image: {file.filename}")
         output_data = remove(contents)
         
-        img = Image.open(__import__('io').BytesIO(output_data))
+        img = Image.open(io.BytesIO(output_data))
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
         
-        img_byte_arr = __import__('io').BytesIO()
+        img_byte_arr = io.BytesIO()
         img.save(img_byte_arr, format='PNG')
         img_byte_arr.seek(0)
         
         logger.info(f"Image processed successfully: {file.filename}")
         
-        from fastapi.responses import StreamingResponse
         return StreamingResponse(
             img_byte_arr,
             media_type="image/png",
@@ -856,7 +888,6 @@ if __name__ == "__main__":
         print("=" * 60, flush=True)
         sys.stdout.flush()
         
-        # Start uvicorn with explicit configuration
         uvicorn.run(
             app,
             host="0.0.0.0",
