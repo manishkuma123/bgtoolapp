@@ -14,7 +14,7 @@ app.add_middleware(
 )
 
 # API key from environment variable
-REMOVEBG_API_KEY = os.environ.get("REMOVEBG_API_KEY", "fyuP441HEmhgwjbrgEVPeNWJ")
+REMOVEBG_API_KEY = os.environ.get("REMOVEBG_API_KEY", "fyuP441HEmhgwjbrgEVPeNWJ") 
 
 @app.get("/")
 def root():
