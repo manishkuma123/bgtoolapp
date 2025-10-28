@@ -41,12 +41,23 @@ print("=" * 60, flush=True)
 # FastAPI
 app = FastAPI(title="Lightweight Background Remover API")
 
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 BASE_DIR = Path("/tmp/temp_processing")  # Use /tmp for temporary files
