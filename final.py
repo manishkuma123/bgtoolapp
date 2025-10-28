@@ -1,67 +1,72 @@
-import os, io, gc
+import os, io
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from rembg import remove, new_session
+import httpx
 
-# ---- Memory limiting ----
-os.environ.update({
-    "CUDA_VISIBLE_DEVICES": "",
-    "OMP_NUM_THREADS": "1",
-    "OPENBLAS_NUM_THREADS": "1",
-    "MKL_NUM_THREADS": "1",
-    "VECLIB_MAXIMUM_THREADS": "1",
-    "NUMEXPR_NUM_THREADS": "1",
-    "ONNX_DISABLE_EXTERNAL_CUSTOM_OPS": "1",
-    "ORT_DISABLE_ALL_OPTIMIZATIONS": "1",
-    "U2NET_HOME": "/tmp/.u2net",
-})
-
-app = FastAPI(title="Render 512MB Image Remover")
+app = FastAPI(title="Background Removal API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
-# Lazy init
-rembg_session = None
+# API key from environment variable
+REMOVEBG_API_KEY = os.environ.get("REMOVEBG_API_KEY", "fyuP441HEmhgwjbrgEVPeNWJ")
 
 @app.get("/")
 def root():
-    return {"status": "running", "model": "u2netp"}
+    return {"status": "running", "service": "remove.bg API"}
 
 @app.post("/remove-image-background/")
 async def remove_bg(file: UploadFile = File(...)):
-    global rembg_session
     if not file.content_type.startswith("image/"):
         raise HTTPException(400, "Please upload an image")
-
-    if rembg_session is None:
-        rembg_session = new_session(model_name="u2netp")
+    
+    if not REMOVEBG_API_KEY:
+        raise HTTPException(500, "API key not configured")
 
     contents = await file.read()
-    if len(contents) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Max 5MB image")
+    if len(contents) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(400, "Max 10MB image")
 
-    output = remove(contents, session=rembg_session)
-    del contents
-    gc.collect()
-
-    return StreamingResponse(
-        io.BytesIO(output),
-        media_type="image/png",
-        headers={"Content-Disposition": f"attachment; filename=no_bg_{file.filename}"}
-    )
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                "https://api.remove.bg/v1.0/removebg",
+                files={"image_file": (file.filename, contents, file.content_type)},
+                data={"size": "auto"},
+                headers={"X-Api-Key": REMOVEBG_API_KEY}
+            )
+            
+            if response.status_code != 200:
+                error_msg = response.json().get("errors", [{}])[0].get("title", "Unknown error")
+                raise HTTPException(response.status_code, f"Remove.bg error: {error_msg}")
+            
+            return StreamingResponse(
+                io.BytesIO(response.content),
+                media_type="image/png",
+                headers={
+                    "Content-Disposition": f"attachment; filename=no_bg_{file.filename}",
+                    "Access-Control-Expose-Headers": "Content-Disposition"
+                }
+            )
+        except httpx.TimeoutException:
+            raise HTTPException(504, "Request timeout - image processing took too long")
+        except httpx.RequestError as e:
+            raise HTTPException(500, f"Network error: {str(e)}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, f"Processing failed: {str(e)}")
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "api_configured": bool(REMOVEBG_API_KEY)}
 
 if __name__ == "__main__":
-    import uvicorn, sys, logging
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port, workers=1)
