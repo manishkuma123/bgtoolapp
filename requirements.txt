@@ -7,5 +7,9 @@ opencv-python-headless
 pillow
 ffmpeg-python
 python-dotenv
+fastapi==0.120.0
+uvicorn[standard]==0.38.0
+rembg==2.0.67
+python-multipart==0.0.20
 
 onnxruntime==1.23.2
